@@ -436,8 +436,28 @@ function getSeason(m){
   return {name:'冬季',cls:'season-winter'};
 }
 
+// ===== 持久化 =====
+function loadFromStorage(){
+  try {
+    const cp = JSON.parse(localStorage.getItem('plantmap_custom_plants')||'[]');
+    cp.forEach(c=>{ if(!PLANT_DB.find(p=>p.id===c.id)) PLANT_DB.push(c); });
+    addedPlants = JSON.parse(localStorage.getItem('plantmap_plants')||'[]');
+    uploadedPhotos = JSON.parse(localStorage.getItem('plantmap_photos')||'[]');
+  } catch(e){}
+}
+function saveToStorage(){
+  try {
+    localStorage.setItem('plantmap_custom_plants', JSON.stringify(PLANT_DB.filter(p=>p.custom)));
+    localStorage.setItem('plantmap_plants', JSON.stringify(addedPlants));
+    localStorage.setItem('plantmap_photos', JSON.stringify(uploadedPhotos));
+  } catch(e){
+    if(e.name==='QuotaExceededError') showToast('⚠️ 存储空间不足，部分照片数据未保存');
+  }
+}
+
 // ===== 初始化 =====
 window.onload = function(){
+  loadFromStorage();
   loadCampusMap();
   initMapInteraction();
   renderPanel();
@@ -617,7 +637,7 @@ function renderMarkers(){
       e.preventDefault();
       if(confirm(`删除"${plant.name}"的标记？`)){
         addedPlants = addedPlants.filter(p=>p.id!==ap.id);
-        renderMarkers(); if(currentTab===1) renderPanel();
+        saveToStorage(); renderMarkers(); if(currentTab===1) renderPanel();
       }
     });
     layer.appendChild(el);
@@ -848,7 +868,7 @@ function deletePlantType(id){
   if(!confirm(`确定删除植物类型"${plant.name}"？已放置的该植物标记也将被移除。`)) return;
   PLANT_DB = PLANT_DB.filter(p=>p.id!==id);
   addedPlants = addedPlants.filter(p=>p.plantId!==id);
-  renderMarkers(); renderPanel();
+  saveToStorage(); renderMarkers(); renderPanel();
 }
 
 // ----- Tab1: 已添加 -----
@@ -890,14 +910,14 @@ function renderAddedList(container){
 
 function deleteMarker(id){
   addedPlants = addedPlants.filter(p=>p.id!==id);
-  renderMarkers(); renderPanel();
+  saveToStorage(); renderMarkers(); renderPanel();
 }
 function attachPhotoToMarker(event, markerId){
   const ap = addedPlants.find(p=>p.id===markerId);
   if(!ap) return;
   Array.from(event.target.files).forEach(f=>{
     const reader = new FileReader();
-    reader.onload = e=>{ ap.photos = ap.photos||[]; ap.photos.push(e.target.result); showToast('照片已附加！'); };
+    reader.onload = e=>{ ap.photos = ap.photos||[]; ap.photos.push(e.target.result); saveToStorage(); showToast('照片已附加！'); };
     reader.readAsDataURL(f);
   });
 }
@@ -946,13 +966,13 @@ function processPhotoFiles(files){
     const reader = new FileReader();
     reader.onload = e=>{
       uploadedPhotos.push({id:Date.now()+Math.random(),url:e.target.result,name:f.name.replace(/\.[^.]+$/,''),campus:currentCampus,x:0.2+Math.random()*0.6,y:0.2+Math.random()*0.6});
-      renderMarkers(); renderPhotoGallery();
+      saveToStorage(); renderMarkers(); renderPhotoGallery();
       showToast('照片已上传并标注在地图上');
     };
     reader.readAsDataURL(f);
   });
 }
-function deleteUploadedPhoto(id){ uploadedPhotos=uploadedPhotos.filter(p=>p.id!==id); renderMarkers(); renderPhotoGallery(); }
+function deleteUploadedPhoto(id){ uploadedPhotos=uploadedPhotos.filter(p=>p.id!==id); saveToStorage(); renderMarkers(); renderPhotoGallery(); }
 
 // ===== 新建/编辑植物弹窗 =====
 function buildNewPlantForm(plant){
@@ -1150,6 +1170,7 @@ function saveNewPlant(){
     });
     showToast(`植物"${name}"已添加到植物库！`);
   }
+  saveToStorage();
   closeNewPlantModal();
   renderMarkers(); renderPanel();
 }
@@ -1314,6 +1335,7 @@ function confirmPlacePlant(){
   document.getElementById('place-plant-modal').classList.remove('show');
   pendingPlaceX = null; pendingPlaceY = null; ppPlantId = null; ppPhotos = [];
   exitAddMode();
+  saveToStorage();
   renderMarkers();
   if(currentTab===1) renderPanel();
 
